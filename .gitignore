@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+
+# Herramientas locales de asistencia, no forman parte del sondeo.
+.atl/
+
+# data/ NO va aca: el workflow lo commitea a proposito, es el producto del repo.

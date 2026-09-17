@@ -1,0 +1,50 @@
+name: sondeo arbitraje USDT/ARS
+
+on:
+  schedule:
+    # Cada 15 minutos. GitHub demora los cron jobs bajo carga (a veces 10-20 min)
+    # y puede saltear corridas: para muestreo estadistico no importa, para
+    # trading en vivo no le confies el timing.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}   # permite dispararlo a mano desde la pestaña Actions
+
+permissions:
+  contents: write         # necesario para que el bot pueda commitear el CSV
+
+concurrency:
+  # Si una corrida se demora y se superpone con la siguiente, la nueva espera
+  # en vez de pisar el commit. Sin esto los push chocan.
+  group: sondeo
+  cancel-in-progress: false
+
+jobs:
+  sondear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Correr el sondeo
+        run: python sondeo.py
+
+      - name: Commitear los datos
+        run: |
+          if [ -z "$(git status --porcelain data)" ]; then
+            echo "Sin cambios (la API probablemente no respondio). Nada que commitear."
+            exit 0
+          fi
+          git config user.name  "sondeo-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          git commit -m "sondeo $(date -u +'%Y-%m-%d %H:%M UTC')"
+          # Otra corrida pudo haber commiteado mientras esta trabajaba.
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && break
+            sleep 5
+          done
+          git push origin "HEAD:${GITHUB_REF_NAME}"
